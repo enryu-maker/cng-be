@@ -28,6 +28,7 @@ db_depandancy = Annotated[Session, Depends(get_db)]
 user_dependancy = Annotated[dict, Depends(decode_access_token)]
 
 
+@router.post('/register/')
 async def register_user(
     icon: UploadFile = File(None),
     name: str = Form(...),
@@ -92,7 +93,7 @@ async def register_user(
     return {"message": "OTP sent successfully. Please verify your phone number."}
 
 
-@router.post("/login", status_code=status.HTTP_200_OK)
+@router.post("/login/", status_code=status.HTTP_200_OK)
 async def login(loginrequest: LoginRequest, db: Session = Depends(get_db)):
     # Retrieve user based on phone number
     user = db.query(User).filter(User.phone_number ==
@@ -132,7 +133,7 @@ async def login(loginrequest: LoginRequest, db: Session = Depends(get_db)):
     return {"message": "OTP sent successfully. Please verify to proceed."}
 
 
-@router.post("/verify", status_code=status.HTTP_201_CREATED)
+@router.post("/verify/", status_code=status.HTTP_201_CREATED)
 async def verify_login(verifyrequest: OTPVerify, db: Session = Depends(get_db)):
     # Retrieve user based on phone number
     user = db.query(User).filter(User.phone_number ==
@@ -176,6 +177,53 @@ async def read_users(user: user_dependancy, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/user-wallet/")
+async def read_wallet(user: user_dependancy, db: Session = Depends(get_db)):
+    user_wallet = db.query(Wallet).filter(
+        Wallet.user_id == user['user_id']).first()
+    if user_wallet:
+        return user_wallet
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="User not found"
+    )
+
+
+@router.put("/update-wallet/", status_code=status.HTTP_200_OK)
+async def update_wallet(
+    user: user_dependancy,
+    amount: int,
+    db: Session = Depends(get_db)
+):
+    # Fetch the wallet associated with the user ID
+    user_wallet = db.query(Wallet).filter(
+        Wallet.user_id == user['user_id']).first()
+
+    if not user_wallet:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User wallet not found"
+        )
+
+    try:
+        # Update the wallet balance
+        user_wallet.balance = amount
+        db.commit()
+        db.refresh(user_wallet)  # Optional: Refresh to get the updated data
+
+        return {
+            "message": "Wallet updated successfully",
+            "wallet_balance": user_wallet.balance
+        }
+
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred: {e}"
+        )
+
+
 @router.get("/nearby-station/")
 async def neardby_station(
     user_lat: float = Query(..., ge=-90, le=90),  # User's latitude
@@ -204,7 +252,7 @@ async def neardby_station(
     return nearby_stations
 
 
-@router.post("/vehicle", response_model=VehicleResponse)
+@router.post("/vehicle/", response_model=VehicleResponse)
 async def create_vehicle(
     user: user_dependancy,
     vehicle: CreateVehicle,
