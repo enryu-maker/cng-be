@@ -1,17 +1,18 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException, Response, status, Form, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Response, status, Form, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from app.schemas.user import OTPVerify, LoginRequest, UserResponse, CreateVehicle, VehicleResponse
+from app.schemas.cng import StationSchema
 from app.database import SessionLocale
 from app.model.user import User, Vehicle, Wallet
-
-
+from app.model.cng import Station
+from geopy.distance import geodesic
 from datetime import timedelta
 from app.service.user_service import generate_otp, send_otp, create_accesss_token, decode_access_token, generate_wallet_number
 
 router = APIRouter(
     prefix="/v1/user",
-    tags=["v1 user API"],
+    tags=["V1 USER API"],
 )
 
 
@@ -144,7 +145,6 @@ async def verify_login(verifyrequest: OTPVerify, db: Session = Depends(get_db)):
         )
 
     # Check if the OTP matches
-    print(user.otp)
     if user.otp != verifyrequest.otp:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -174,6 +174,34 @@ async def read_users(user: user_dependancy, db: Session = Depends(get_db)):
         status_code=status.HTTP_404_NOT_FOUND,
         detail="User not found"
     )
+
+
+@router.get("/nearby-station/")
+async def neardby_station(
+    user_lat: float = Query(..., ge=-90, le=90),  # User's latitude
+    user_long: float = Query(..., ge=-180, le=180),  # User's longitude
+    range_km: float = Query(5.0, gt=0),
+    db: Session = Depends(get_db)
+):
+    stations = db.query(Station).all()  # Get all stations from the database
+    nearby_stations = []
+
+    # Loop through each station and calculate its distance to the user
+    for station in stations:
+        station_coords = (station.latitude, station.longitude)
+        user_coords = (user_lat, user_long)
+
+        # Calculate distance in km
+        distance = geodesic(user_coords, station_coords).kilometers
+
+        if distance <= range_km:  # Filter stations within range
+            nearby_stations.append(station)
+
+    if not nearby_stations:
+        raise HTTPException(
+            status_code=404, detail="No stations found within the specified range")
+
+    return nearby_stations
 
 
 @router.post("/vehicle", response_model=VehicleResponse)
@@ -211,18 +239,3 @@ async def create_vehicle(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to create vehicle: {str(e)}"
         )
-
-
-@router.get("/users/", response_model=list[UserResponse])
-async def read_users(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
-    return db.query(User).offset(skip).limit(limit).all()
-
-
-@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_user(user_id: int, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.id == user_id).first()
-    if db_user:
-        db.delete(db_user)
-        db.commit()
-        return {"message": "User deleted successfully"}
-    raise HTTPException(status_code=404, detail="User not found")

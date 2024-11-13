@@ -11,6 +11,8 @@ import requests
 from typing import Annotated
 from sqlalchemy.orm import Session
 from app.model.user import Wallet
+from passlib.context import CryptContext
+
 load_dotenv()
 
 
@@ -18,6 +20,24 @@ SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl='/api/user/verify-user')
+bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+
+
+def hash_pass(password: str):
+    return bcrypt_context.hash(password)
+
+
+def verify_user(loginrequest, db, Model):
+    """
+    Function for verifying user credentials
+    """
+    user = db.query(Model).filter(
+        Model.email == loginrequest.email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if not bcrypt_context.verify(loginrequest.password, user.password):
+        raise HTTPException(status_code=401, detail="Invalid Password")
+    return user
 
 
 def generate_otp():

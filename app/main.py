@@ -8,7 +8,8 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import JSONResponse
 import logging
 from app.database import Base, engine
-from app.routes import user
+from app.routes import user, cng, admin
+
 # Create FastAPI app instance
 app = FastAPI()
 
@@ -50,6 +51,8 @@ async def validation_exception_handler(request, exc):
 Base.metadata.create_all(bind=engine)
 
 app.include_router(user.router)
+app.include_router(cng.router)
+app.include_router(admin.router)
 
 
 @app.get('/')
