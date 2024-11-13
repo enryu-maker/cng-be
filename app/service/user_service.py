@@ -25,19 +25,23 @@ def generate_otp():
 
 
 def send_otp(otp: str, mobile_number: str) -> bool:
-
     url = f'https://2factor.in/API/V1/74380642-1da4-11ef-8b60-0200cd936042/SMS/{
         mobile_number}/{otp}'
-    print(url)
     payload = {}
     headers = {}
 
-    response = requests.request(
-        "GET", url,
-        headers=headers, data=payload)
-    if response.status_code == 200:
-        return True
-    return False
+    try:
+        response = requests.get(url, headers=headers, data=payload)
+
+        if response.status_code == 200:
+            return True
+        else:
+            print(f"Failed to send OTP. Status code: {
+                  response.status_code}, Response: {response.text}")
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"An error occurred: {e}")
+        return False
 
 
 def create_accesss_token(name: str, user_id: int, expiry: timedelta):
