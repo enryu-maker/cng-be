@@ -7,7 +7,7 @@ from app.database import SessionLocale
 from app.model.book import Booking, BookingSlot
 from app.model.user import User, Wallet
 from app.model.cng import Station
-
+from sqlalchemy.sql import func
 
 from datetime import timedelta
 from app.service.user_service import create_accesss_token, decode_access_token, hash_pass, verify_user
@@ -112,6 +112,26 @@ async def station_order(user: user_dependancy, db: Session = Depends(get_db)):
         status_code=status.HTTP_404_NOT_FOUND,
         detail="Booking Not Found"
     )
+
+
+@router.get("/station-total-income/", response_model=dict, status_code=status.HTTP_200_OK)
+async def get_total_income(user: user_dependancy, db: Session = Depends(get_db)):
+    # Query the total income for the station by summing the amount field in Booking
+    total_income = db.query(func.sum(Booking.amount)).join(
+        Station, Station.id == Booking.station_id
+    ).filter(
+        Booking.station_id == user['user_id']
+    ).scalar()
+
+    if total_income is not None:
+        return {
+            "total_income": total_income
+        }
+
+    # If no income found, return zero or handle it as needed
+    return {
+        "total_income": 0
+    }
 
 
 @router.get("/user-orders/", status_code=status.HTTP_200_OK)
