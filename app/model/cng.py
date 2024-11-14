@@ -23,6 +23,7 @@ class Station(Base):
     postal_code = Column(String, nullable=False)
     fuel_available = Column(Boolean, default=False)  # Corrected typo
     price = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow,
                         onupdate=datetime.datetime.utcnow)

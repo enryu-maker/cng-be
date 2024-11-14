@@ -3,9 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status, Form, U
 from sqlalchemy.orm import Session
 from app.schemas.admin import AdminLogin, AdminRegister
 from app.schemas import user as userSchema
+from app.schemas import book as bookSchema
 from app.database import SessionLocale
 from app.model.admin import Admin
-from app.model import user
+from app.model import user, cng, book
 
 from datetime import timedelta
 from app.service.user_service import create_accesss_token, decode_access_token, hash_pass, verify_user
@@ -29,7 +30,7 @@ user_dependancy = Annotated[dict, Depends(decode_access_token)]
 
 
 @router.post("/admin-register", status_code=status.HTTP_201_CREATED)
-async def admin_register(loginrequest: AdminRegister, db: Session = Depends(get_db)):
+async def admin_register(loginrequest: AdminRegister, db: db_depandancy):
 
     admin = db.query(Admin).filter(Admin.email ==
                                    loginrequest.email).first()
@@ -60,7 +61,7 @@ async def admin_register(loginrequest: AdminRegister, db: Session = Depends(get_
 
 
 @router.post("/admin-login", status_code=status.HTTP_200_OK)
-async def worker_login(loginrequest: AdminLogin, db: Session = Depends(get_db)):
+async def worker_login(loginrequest: AdminLogin, db: db_depandancy):
     admin = verify_user(loginrequest=loginrequest, db=db, Model=Admin)
 
     if admin:
@@ -78,6 +79,39 @@ async def worker_login(loginrequest: AdminLogin, db: Session = Depends(get_db)):
     )
 
 # Add Station
+
+
+@router.post("/slot/", status_code=status.HTTP_201_CREATED)
+async def create_slot(bookslotschema: bookSchema.BookingSlotCreate, db: db_depandancy):
+    try:
+        new_slot = book.BookingSlot(
+            start_time_new=bookslotschema.start_time,
+            end_time_new=bookslotschema.end_time,
+            bookingcount=bookslotschema.bookingcount
+        )
+        db.add(new_slot)
+        db.commit()
+        db.refresh(new_slot)
+        return {
+            "message": "Slot Added Sucessfully"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{e}"
+        )
+
+
+@router.delete("/slot/{slot_id}", status_code=status.HTTP_201_CREATED)
+async def create_slot(slot_id: int, db: db_depandancy):
+    db_user = db.query(book.BookingSlot).filter(
+        book.BookingSlot.id == slot_id).first()
+    if db_user:
+        db.delete(db_user)
+        db.commit()
+        return {"message": "User deleted successfully"}
+    raise HTTPException(status_code=404, detail="User not found")
 
 
 @router.post("/station-register", status_code=status.HTTP_201_CREATED)
@@ -99,7 +133,42 @@ async def station_register(
     price: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    pass
+    admin = db.query(Admin).filter(Admin.id ==
+                                   user["user_id"]).first()
+    if admin:
+        icon_data = await image.read() if image else None
+
+        new_station = cng.Station(
+            name=name,
+            image=icon_data,
+            phone_number=phone_number,
+            passcode=passcode,
+            description=description,
+            latitude=latitude,
+            longitude=longitude,
+            address=address,
+            city=city,
+            state=state,
+            country=country,
+            postal_code=postal_code,
+            fuel_available=fuel_available,
+            price=price,
+            is_active=True
+        )
+        try:
+            db.add(new_station)
+            db.commit()
+            db.refresh(new_station)
+
+            return {
+                "message": "Station created successfully",
+            }
+
+        except Exception as e:
+            print(e)
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 # User API
 

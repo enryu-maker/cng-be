@@ -9,7 +9,7 @@ from app.model.cng import Station
 from geopy.distance import geodesic
 from datetime import timedelta
 from app.service.user_service import generate_otp, send_otp, create_accesss_token, decode_access_token, generate_wallet_number
-
+import base64
 router = APIRouter(
     prefix="/v1/user",
     tags=["V1 USER API"],
@@ -225,7 +225,7 @@ async def update_wallet(
 
 
 @router.get("/nearby-station/")
-async def neardby_station(
+async def nearby_station(
     user_lat: float = Query(..., ge=-90, le=90),  # User's latitude
     user_long: float = Query(..., ge=-180, le=180),  # User's longitude
     range_km: float = Query(5.0, gt=0),
@@ -243,6 +243,11 @@ async def neardby_station(
         distance = geodesic(user_coords, station_coords).kilometers
 
         if distance <= range_km:  # Filter stations within range
+            # Convert image to base64 if exists
+            if station.image:  # Assuming image is stored as bytes in the Station model
+                encoded_image = base64.b64encode(station.image).decode('utf-8')
+                station.image = encoded_image
+
             nearby_stations.append(station)
 
     if not nearby_stations:
