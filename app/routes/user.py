@@ -2,7 +2,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Response, status, Form, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from app.schemas.user import OTPVerify, LoginRequest, UserResponse, CreateVehicle, VehicleResponse
-from app.schemas.cng import StationSchema
 from app.database import SessionLocale
 from app.model.user import User, Vehicle, Wallet
 from app.model.cng import Station
@@ -35,13 +34,10 @@ async def register_user(
     phone_number: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    # Read the icon file if provided
     icon_data = await icon.read() if icon else None
 
-    # Generate OTP
     otp = generate_otp()
 
-    # Send OTP to the phone number
     try:
         send_otp(otp=otp, mobile_number=phone_number)
     except Exception as e:
@@ -50,19 +46,17 @@ async def register_user(
             detail=f"Failed to send OTP: {str(e)}"
         )
 
-    # Create the user object
     user = User(
         name=name,
         phone_number=phone_number,
         icon=icon_data,
-        otp=otp  # Store OTP for future verification
+        otp=otp
     )
 
-    # Add user to the database and commit to get the user ID
     try:
         db.add(user)
         db.commit()
-        db.refresh(user)  # Refresh to get the user ID
+        db.refresh(user)
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -70,19 +64,17 @@ async def register_user(
             detail=f"Failed to register user: {str(e)}"
         )
 
-    # Now that the user is created and we have the user ID, create the wallet
     wallet_number = generate_wallet_number(db)
     wallet = Wallet(
-        user_id=user.id,  # Assign the user ID to the wallet
+        user_id=user.id,
         balance=0,
         wallet_number=wallet_number
     )
 
-    # Add wallet to the database
     try:
         db.add(wallet)
         db.commit()
-        db.refresh(wallet)  # Refresh to get the wallet data
+        db.refresh(wallet)
     except Exception as e:
         db.rollback()
         raise HTTPException(
@@ -95,7 +87,7 @@ async def register_user(
 
 @router.post("/login/", status_code=status.HTTP_200_OK)
 async def login(loginrequest: LoginRequest, db: Session = Depends(get_db)):
-    # Retrieve user based on phone number
+
     user = db.query(User).filter(User.phone_number ==
                                  loginrequest.phone_number).first()
 
@@ -105,18 +97,15 @@ async def login(loginrequest: LoginRequest, db: Session = Depends(get_db)):
             detail="User not found"
         )
 
-    # Check if the user's account is active
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account not activated. Please verify your phone number first."
         )
 
-    # Generate a new OTP
     otp = generate_otp()
-    user.otp = otp  # Update the OTP in the database
+    user.otp = otp
 
-    # Send the OTP to the user's phone number
     try:
         send_otp(otp=otp, mobile_number=loginrequest.phone_number)
     except Exception as e:
@@ -126,7 +115,6 @@ async def login(loginrequest: LoginRequest, db: Session = Depends(get_db)):
             detail=f"Failed to send OTP: {str(e)}"
         )
 
-    # Commit the OTP change to the database
     db.commit()
     db.refresh(user)
 
@@ -168,7 +156,9 @@ async def verify_login(verifyrequest: OTPVerify, db: Session = Depends(get_db)):
 
 @router.get("/profile/", response_model=UserResponse)
 async def read_users(user: user_dependancy, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.id == user.id).first()
+    print(user)
+    db_user = db.query(User).filter(User.id == user['user_id']).first()
+    print(db_user)
     if db_user:
         return db_user
     raise HTTPException(
@@ -207,7 +197,7 @@ async def update_wallet(
 
     try:
         # Update the wallet balance
-        user_wallet.balance = amount
+        user_wallet.balance = amount + user_wallet.balance
         db.commit()
         db.refresh(user_wallet)  # Optional: Refresh to get the updated data
 
@@ -292,3 +282,31 @@ async def create_vehicle(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to create vehicle: {str(e)}"
         )
+
+
+@router.get("/vehicle/", response_model=VehicleResponse)
+async def get_vehicle(
+    vehicle_id: int,
+    user: user_dependancy,
+    db: Session = Depends(get_db)
+):
+    # Check if the user exists in the database
+    db_user = db.query(User).filter(User.id == user['id']).all()
+    if not db_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    # Retrieve the vehicle associated with the user
+    db_vehicle = db.query(Vehicle).filter(
+        Vehicle.user_id == user['id']
+    ).first()
+
+    if not db_vehicle:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Vehicle not found"
+        )
+
+    return db_vehicle
