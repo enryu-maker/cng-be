@@ -247,14 +247,14 @@ async def nearby_station(
     return nearby_stations
 
 
-@router.post("/vehicle/", response_model=VehicleResponse)
+@router.post("/vehicle/")
 async def create_vehicle(
     user: user_dependancy,
     vehicle: CreateVehicle,
     db: Session = Depends(get_db)
 ):
     # Check if the user exists in the database
-    db_user = db.query(User).filter(User.id == user['id']).first()
+    db_user = db.query(User).filter(User.id == user['user_id']).first()
     if not db_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -264,7 +264,8 @@ async def create_vehicle(
     # Create a new vehicle associated with the user
     try:
         new_vehicle = Vehicle(
-            user_id=user['id'],  # Set the user ID from the authenticated user
+            # Set the user ID from the authenticated user
+            user_id=user['user_id'],
             vehicle_number=vehicle.vehicle_number,
             vehicle_make=vehicle.vehicle_make,
             vehicle_model=vehicle.vehicle_model,
@@ -277,6 +278,7 @@ async def create_vehicle(
             "vehicle_id": new_vehicle.id,
         }
     except Exception as e:
+        print(e)
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -284,14 +286,13 @@ async def create_vehicle(
         )
 
 
-@router.get("/vehicle/", response_model=VehicleResponse)
+@router.get("/vehicle/", response_model=list[VehicleResponse])
 async def get_vehicle(
-    vehicle_id: int,
     user: user_dependancy,
     db: Session = Depends(get_db)
 ):
     # Check if the user exists in the database
-    db_user = db.query(User).filter(User.id == user['id']).all()
+    db_user = db.query(User).filter(User.id == user['user_id']).all()
     if not db_user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -300,8 +301,8 @@ async def get_vehicle(
 
     # Retrieve the vehicle associated with the user
     db_vehicle = db.query(Vehicle).filter(
-        Vehicle.user_id == user['id']
-    ).first()
+        Vehicle.user_id == user['user_id']
+    ).all()
 
     if not db_vehicle:
         raise HTTPException(

@@ -8,7 +8,7 @@ from app.model.book import Booking, BookingSlot
 from app.model.user import User, Wallet
 from app.model.cng import Station
 from sqlalchemy.sql import func
-
+from sqlalchemy.orm import joinedload
 from datetime import timedelta
 from app.service.user_service import create_accesss_token, decode_access_token, hash_pass, verify_user
 
@@ -32,39 +32,53 @@ user_dependancy = Annotated[dict, Depends(decode_access_token)]
 
 @router.post("/create/", status_code=status.HTTP_200_OK)
 async def create_order(user: user_dependancy, bookingcreate: bookSchema.BookingCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(
-        User.id == user['user_id']).first()
-    user_wallet = db.query(Wallet).filter(
-        Wallet.user_id == user['user_id']).first()
-    if db_user:
-        if user_wallet.balance > bookingcreate.amount:
-            new_order = Booking(
-                user_id=db_user.id,
-                station_id=bookingcreate.station_id,
-                booking_slot=bookingcreate.booking_slot,
-                amount=bookingcreate.amount,
-                status=bookingcreate.status,
-            )
-            db.add(new_order)
-            db.commit()
-            db.refresh(new_order)
+    try:
+        db_user = db.query(User).filter(User.id == user['user_id']).first()
+        user_wallet = db.query(Wallet).filter(
+            Wallet.user_id == user['user_id']).first()
 
-            new_balance = user_wallet.balance - bookingcreate.amount
-            user_wallet.balance = new_balance
-            db.add(user_wallet)
-            db.commit()
-            db.refresh(user_wallet)
-        else:
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        if not user_wallet:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User wallet not found"
+            )
+
+        if user_wallet.balance < bookingcreate.amount:
             return {"message": "Insufficient wallet balance"}
+
+        new_order = Booking(
+            user_id=db_user.id,
+            station_id=bookingcreate.station_id,
+            booking_slot=bookingcreate.booking_slot,
+            amount=bookingcreate.amount,
+            status=bookingcreate.status,
+        )
+        db.add(new_order)
+        db.commit()
+        db.refresh(new_order)
+
+        new_balance = user_wallet.balance - bookingcreate.amount
+        user_wallet.balance = new_balance
+        db.commit()
+        db.refresh(user_wallet)
 
         return {
             "message": "Order created successfully",
-            "order_id": new_order.id,
+            "order_id": new_order.id
         }
-    raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="User not found"
-    )
+
+    except Exception as e:
+        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
 
 @router.get("/station-orders/", response_model=list[dict], status_code=status.HTTP_200_OK)
@@ -136,10 +150,37 @@ async def get_total_income(user: user_dependancy, db: Session = Depends(get_db))
 
 @router.get("/user-orders/", status_code=status.HTTP_200_OK)
 async def user_order(user: user_dependancy, db: Session = Depends(get_db)):
-    user_order = db.query(Booking).filter(
-        Booking.user_id == user['user_id']).all()
-    if user_order:
-        return user_order
+    user_orders = (
+        db.query(Booking)
+        .options(
+            # Replace with the actual relationship name
+            joinedload(Booking.station),
+        )
+        .filter(Booking.user_id == user['user_id'])
+        .all()
+    )
+
+    if user_orders:
+        # Format the response to include details from related tables
+        response = [
+            {
+                "id": order.id,
+                "order_id": order.order_id,
+                "amount": order.amount,
+                "status": order.status,
+                "station": {
+                    "id": order.station.id,
+                    "name": order.station.name,  # Replace with actual field names
+                    "location": order.station.address,
+                    "latitude": order.station.latitude,
+                    "longitude": order.station.longitude,
+                },
+                "booking_slot": order.booking_slot,
+                "user_id": order.user_id,
+            }
+            for order in user_orders
+        ]
+        return response
 
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,

@@ -81,6 +81,39 @@ async def worker_login(loginrequest: AdminLogin, db: db_depandancy):
 # Add Station
 
 
+@router.get("/slots/", status_code=status.HTTP_200_OK)
+async def get_slots(db: db_depandancy):
+    try:
+        # Query all the booking slots from the database
+        slots = db.query(book.BookingSlot).all()
+
+        if not slots:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No slots found"
+            )
+
+        # Prepare a list of slots to return
+        slot_list = [{
+            "id": slot.id,
+            "start_time": slot.start_time_new,
+            "end_time": slot.end_time_new,
+            "time":  slot.start_time_new + "-" + slot.end_time_new,
+            "bookingcount": slot.bookingcount
+        } for slot in slots]
+
+        return {
+            "message": "Slots retrieved successfully",
+            "slots": slot_list
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error retrieving slots: {e}"
+        )
+
+
 @router.post("/slot/", status_code=status.HTTP_201_CREATED)
 async def create_slot(bookslotschema: bookSchema.BookingSlotCreate, db: db_depandancy):
     try:
