@@ -1,12 +1,15 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, status, Form, UploadFile, File
-from sqlalchemy.orm import Session
-from app.schemas.cng import cngLogin, workerView, workerRegister
+from sqlalchemy.orm import Session, joinedload
+from app.schemas.cng import cngLogin, workerView, workerRegister, OrderSchema
+
 from app.database import SessionLocale
 from app.model.cng import Station, Worker
+from app.model.book import Booking
 from datetime import timedelta
 from app.service.user_service import create_accesss_token, decode_access_token
-
+import requests
+import httpx
 router = APIRouter(
     prefix="/v1/station",
     tags=["V1 CNG STATION API"],
@@ -239,3 +242,117 @@ async def worker_register(user: user_dependancy, loginrequest: workerRegister, d
         status_code=status.HTTP_400_BAD_REQUEST,
         detail="Worker Already Exist"
     )
+
+
+# @router.get("/card-fetch/", status_code=status.HTTP_200_OK)
+# async def card_fetch(user: user_dependancy, db: Session = Depends(get_db)):
+#     worker = db.query(Worker).filter(
+#         Worker.id == user['user_id']).all()
+
+#     if not worker:
+#         raise HTTPException(
+#             status_code=status.HTTP_404_NOT_FOUND,
+#             detail="Worker not found"
+#         )
+
+#     resp = requests.get("http://192.168.1.26:8000/read")
+#     return resp
+
+@router.get("/card-fetch/", status_code=status.HTTP_200_OK)
+async def card_fetch(user: user_dependancy, db: Session = Depends(get_db)):
+    # Query the database for the worker
+    worker = db.query(Worker).filter(Worker.id == user['user_id']).first()
+
+    if not worker:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Worker not found"
+        )
+
+    # Make an external request to the RFID service
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get("http://192.168.1.26:8000/read")
+        resp.raise_for_status()  # Check for HTTP error status codes
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Error fetching card data from external service"
+        )
+    user_orders = (
+        db.query(Booking)
+        .options(
+            # Replace with the actual relationship name
+            joinedload(Booking.station),
+        )
+        .filter(Booking.user_id == resp.json()["data"])
+        .first()
+    )
+
+    print(user_orders)
+
+    if user_orders:
+        if user_orders.station.id == worker.station_id:
+            if user_orders.status == "Placed":
+                response = {
+                    "id": user_orders.id,
+                    "order_id": user_orders.order_id,
+                    "amount": user_orders.amount,
+                    "status": user_orders.status,
+                    "station": {
+                        "id": user_orders.station.id,
+                        "name": user_orders.station.name,  # Replace with actual field names
+                        "location": user_orders.station.address,
+                        "latitude": user_orders.station.latitude,
+                        "longitude": user_orders.station.longitude,
+                    },
+                    "booking_slot": user_orders.booking_slot,
+                    "user_id": user_orders.user_id,
+                }
+                print(resp.json())
+                return response
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No order Available"
+            )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Order not belong to this station"
+        )
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Booking Not found"
+    )
+
+
+@router.get("/order-update/", status_code=status.HTTP_200_OK)
+async def card_update(
+        user: user_dependancy,
+        order_id: int,
+        db: Session = Depends(get_db)):
+    worker = db.query(Worker).filter(Worker.id == user['user_id']).first()
+
+    if not worker:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Worker not found"
+        )
+
+    try:
+        order = (
+            db.query(Booking)
+            .filter(Booking.user_id == order_id)
+            .first()
+        )
+        order.status = "Completed"
+        db.commit()
+        db.refresh(order)
+        return {
+            "message": "Order Completed"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{e}"
+        )

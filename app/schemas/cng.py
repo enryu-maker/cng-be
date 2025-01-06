@@ -37,3 +37,13 @@ class StationSchema(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class OrderSchema(BaseModel):
+    id: int
+    user_id: int
+    station_id: int
+    status: str
+
+    class Config:
+        orm_mode = True
