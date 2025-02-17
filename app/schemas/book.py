@@ -20,6 +20,7 @@ class BookingCreate(BaseModel):
     booking_slot: int
     amount: int
     status: str
+    bookDate: str
 
 
 class BookingRead(BookingCreate):

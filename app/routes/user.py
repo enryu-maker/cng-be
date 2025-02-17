@@ -29,27 +29,24 @@ user_dependancy = Annotated[dict, Depends(decode_access_token)]
 
 @router.post('/register/')
 async def register_user(
-    icon: UploadFile = File(None),
     name: str = Form(...),
     phone_number: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    icon_data = await icon.read() if icon else None
 
     otp = generate_otp()
 
-    try:
-        send_otp(otp=otp, mobile_number=phone_number)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to send OTP: {str(e)}"
-        )
+    # try:
+    #     send_otp(otp=otp, mobile_number=phone_number)
+    # except Exception as e:
+    #     raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail=f"Failed to send OTP: {str(e)}"
+    #     )
 
     user = User(
         name=name,
         phone_number=phone_number,
-        icon=icon_data,
         otp=otp
     )
 
@@ -82,7 +79,7 @@ async def register_user(
             detail=f"Failed to create wallet: {str(e)}"
         )
 
-    return {"message": "OTP sent successfully. Please verify your phone number."}
+    return {"message": "User Created Sucessfully"}
 
 
 @router.post("/login/", status_code=status.HTTP_200_OK)

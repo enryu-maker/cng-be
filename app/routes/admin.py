@@ -149,7 +149,7 @@ async def create_slot(slot_id: int, db: db_depandancy):
 
 @router.post("/station-register", status_code=status.HTTP_201_CREATED)
 async def station_register(
-    user: user_dependancy,
+    # user: user_dependancy,
     name: str = Form(...),
     image: UploadFile = File(None),
     phone_number: str = Form(...),
@@ -166,8 +166,7 @@ async def station_register(
     price: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    admin = db.query(Admin).filter(Admin.id ==
-                                   user["user_id"]).first()
+    admin = True
     if admin:
         icon_data = await image.read() if image else None
 

@@ -58,6 +58,7 @@ async def create_order(user: user_dependancy, bookingcreate: bookSchema.BookingC
             booking_slot=bookingcreate.booking_slot,
             amount=bookingcreate.amount,
             status=bookingcreate.status,
+            booking_date=bookingcreate.bookDate
         )
         db.add(new_order)
         db.commit()
@@ -83,7 +84,7 @@ async def create_order(user: user_dependancy, bookingcreate: bookSchema.BookingC
 
 @router.get("/station-orders/", response_model=list[dict], status_code=status.HTTP_200_OK)
 async def station_order(user: user_dependancy, db: Session = Depends(get_db)):
-    # Query the bookings, joining with User, Station, and BookingSlot to get the additional info
+
     orders = db.query(
         Booking.order_id,
         User.name.label('user_name'),  # Alias the user name
