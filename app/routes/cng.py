@@ -272,56 +272,51 @@ async def card_fetch(user: user_dependancy, db: Session = Depends(get_db)):
     # Make an external request to the RFID service
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get("http://192.168.1.26:8000/read")
+            resp = await client.get("http://192.168.2.2:8000/read")
         resp.raise_for_status()  # Check for HTTP error status codes
     except httpx.RequestError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Error fetching card data from external service"
-        )
+        print(e)
     user_orders = (
         db.query(Booking)
         .options(
             # Replace with the actual relationship name
             joinedload(Booking.station),
         )
-        .filter(Booking.user_id == resp.json()["data"])
-        .first()
+        .filter(Booking.user_id == 1)
+        .order_by(Booking.id.desc())  # Assuming 'id' is the primary key
+        .first()  # Fetch the first (most recent) record
     )
 
-    print(user_orders)
+    print("user order", user_orders.amount)
+    print("worker order", worker.station_id)
+    print(user_orders.status, "data")
 
-    if user_orders:
-        if user_orders.station.id == worker.station_id:
-            if user_orders.status == "Placed":
-                response = {
-                    "id": user_orders.id,
-                    "order_id": user_orders.order_id,
-                    "amount": user_orders.amount,
-                    "status": user_orders.status,
-                    "station": {
-                        "id": user_orders.station.id,
-                        "name": user_orders.station.name,  # Replace with actual field names
-                        "location": user_orders.station.address,
-                        "latitude": user_orders.station.latitude,
-                        "longitude": user_orders.station.longitude,
-                    },
-                    "booking_slot": user_orders.booking_slot,
-                    "user_id": user_orders.user_id,
-                }
-                print(resp.json())
-                return response
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No order Available"
-            )
+    if user_orders.station.id == worker.station_id:
+        if user_orders.status == "Placed":
+            response = {
+                "id": user_orders.id,
+                "order_id": user_orders.order_id,
+                "amount": user_orders.amount,
+                "status": user_orders.status,
+                "station": {
+                    "id": user_orders.station.id,
+                    "name": user_orders.station.name,  # Replace with actual field names
+                    "location": user_orders.station.address,
+                    "latitude": user_orders.station.latitude,
+                    "longitude": user_orders.station.longitude,
+                },
+                "booking_slot": user_orders.booking_slot,
+                "user_id": user_orders.user_id,
+            }
+
+            return response
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Order not belong to this station"
+            detail="No order Available"
         )
     raise HTTPException(
-        status_code=status.HTTP_404_NOT_FOUND,
-        detail="Booking Not found"
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Order not belong to this station"
     )
 
 
@@ -341,7 +336,7 @@ async def card_update(
     try:
         order = (
             db.query(Booking)
-            .filter(Booking.user_id == order_id)
+            .filter(Booking.id == order_id)
             .first()
         )
         order.status = "Completed"
